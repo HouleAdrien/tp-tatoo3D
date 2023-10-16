@@ -1,7 +1,6 @@
 # HMIN322 : idc-3D
 
-Projet *template* pour le TP sur l'insertion de données cachées dans les objets 3D.
-Ce document contient la liste des activités à réaliser durant le TP.
+TP sur l'insertion de données cachées dans les objets 3D Houle Adrien master 2 imagine.
 
 ## VERIFIER LA FIN DU DOCUMENT POUR LES CONDITIONS DE RENDU DE TP
 
@@ -68,7 +67,7 @@ Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 ```
 
-## Travaux
+## Travaux fait dans ce tp
 
 ### 1. Importer un maillage (uniquement pour ceux n'ayant pas de projets 3D)
 1. Clôner le dépôt
@@ -86,8 +85,8 @@ Nous allons implémenter la méthode de Cho *et al.* (2007) [papier](https://www
 5. Ecrire une fonction normalisant un ensemble de valeurs [x_0, x_1, ..., x_n] entre 0.0 et 1.0 (en fonction du minimum et du maximum)
 6. Ecrire une fonction dénormalisant un ensemble de valeurs comprises entre 0.0 et 1.0 (en fonction d'un minimum et d'un maximum)
 7. Ecrire une fonction qui trie un ensemble de valeurs en histogramme de k *bins*
-7. Ecrire la fonction de **tatouage** prenant en entré un maillage, un message, le nombre de bins, *alpha* et la force d'insertion
-8. Ecrire la fonction d'extraction du message à partir d'un maillage, le nombre de bins et *alpha*
+8. Ecrire la fonction de **tatouage** prenant en entré un maillage, un message, le nombre de bins, *alpha* et la force d'insertion
+9. Ecrire la fonction d'extraction du message à partir d'un maillage, le nombre de bins et *alpha*
 
 ### 3. Présenter les résultats
 
@@ -96,7 +95,7 @@ Métriques obligatoires : BER, RMSE, PSNR
 1. En faisant varier la force d'insertion
 2. En faisant varier la capacité
 
-### 4. Attaques
+### 4. Attaques (simplement expliquer au final)
 
 Créer des attaques contre la méthode.
 
