@@ -109,7 +109,3 @@ Proposer des améliorations soit :
 - Sécurité
 - Capacité
 - Robustesse
-
-# RENDU
-## Rapport à rendre avant le 30 septembre 2019 à l'adresse suivante : sebastien.beugnon[at]lirmm.fr
-## Objet du mail : [HMIN322] IDC 3D - <NOM.ETUDIANT>
