@@ -4,39 +4,33 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include <Eigen/Dense>
 #include <igl/writeOFF.h>
+#include <fstream>
 using namespace std;
 
 struct RadialCoordinates {
-    double r;     // Rayon
-    double theta; // Angle azimutal
-    double phi;   // Angle polaire
+    double r;     // Radius
+    double theta; // Azimuthal angle
+    double phi;   // Polar angle
 };
 
 void saveMeshOFF(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const string &filename) {
-    if (igl::writeOFF(filename, V, F)) { 
-        cout << "Maillage sauvegardé dans " << filename << endl;
+    if (igl::writeOFF(filename, V, F)) {
+        cout << "Mesh saved to " << filename << endl;
     } else {
-        cerr << "Erreur lors de la sauvegarde du maillage dans " << filename << endl;
+        cerr << "Error saving the mesh to " << filename << endl;
     }
-}
-
-void saveHistogram(const vector<int>& histo,char* path)
-{
-    ofstream flux(path);
-    for(int i = 0; i < histo.size();i++)    {    flux << (i/(float)histo.size())  << " " << histo[i] << endl;}
 }
 
 vector<Eigen::Vector3d> eigenToVector(const Eigen::MatrixXd &epoints) {
     vector<Eigen::Vector3d> vpoints;
-    for (int i = 0; i < epoints.rows(); ++i) 
-    {
+    for (int i = 0; i < epoints.rows(); ++i) {
         Eigen::Vector3d point(epoints(i, 0), epoints(i, 1), epoints(i, 2));
         vpoints.push_back(point);
     }
     return vpoints;
 }
 
-Eigen::MatrixXd vectorToEigen(const vector<Eigen::Vector3d>& vpoints) {
+Eigen::MatrixXd vectorToEigen(const vector<Eigen::Vector3d> &vpoints) {
     int numPoints = vpoints.size();
 
     if (numPoints == 0) {
@@ -55,7 +49,6 @@ Eigen::MatrixXd vectorToEigen(const vector<Eigen::Vector3d>& vpoints) {
     return epoints;
 }
 
-
 Eigen::Vector3d getBarycenter(const vector<Eigen::Vector3d> &points) {
     Eigen::Vector3d barycenter(0.0, 0.0, 0.0);
 
@@ -70,38 +63,76 @@ Eigen::Vector3d getBarycenter(const vector<Eigen::Vector3d> &points) {
     return barycenter;
 }
 
-RadialCoordinates cartesianToRadial(const Eigen::Vector3d &cartesian) {
+RadialCoordinates cartesianToRadial(const Eigen::Vector3d &cartesian, const Eigen::Vector3d &barycenter) {
     RadialCoordinates radial;
-    radial.r = cartesian.norm();
-    radial.theta = atan2(cartesian(1), cartesian(0));
-    radial.phi = acos(cartesian(2) / radial.r);
+    radial.r = (cartesian - barycenter).norm();
+    radial.theta = atan2(cartesian(1) - barycenter(1), cartesian(0) - barycenter(0));
+    radial.phi = acos((cartesian(2) - barycenter(2)) / radial.r);
     return radial;
 }
 
-void sphericalToCartesian(double r, double theta, double phi, Eigen::Vector3d &cartesian) {
-    cartesian(0) = r * sin(phi) * cos(theta);
-    cartesian(1) = r * sin(phi) * sin(theta);
-    cartesian(2) = r * cos(phi);
+void sphericalToCartesian(double r, double theta, double phi, Eigen::Vector3d &cartesian, const Eigen::Vector3d &barycenter) {
+    cartesian(0) = r * sin(phi) * cos(theta) + barycenter(0);
+    cartesian(1) = r * sin(phi) * sin(theta) + barycenter(1);
+    cartesian(2) = r * cos(phi) + barycenter(2);
 }
 
-void findMinMaxRadials(const vector<RadialCoordinates> &radials, RadialCoordinates &minRadial, RadialCoordinates &maxRadial) {
-    if (radials.empty()) {
-        minRadial = {0.0, 0.0, 0.0};
-        maxRadial = {0.0, 0.0, 0.0};
-        return;
+RadialCoordinates getMinRadialFromBin(const vector<RadialCoordinates> &radials, const vector<int> &bin) {
+    if (bin.empty()) {
+        cerr << "The bin is empty." << endl;
+        return RadialCoordinates{0.0, 0.0, 0.0}; // Default values
     }
 
-    minRadial = radials[0];
-    maxRadial = radials[0];
-
-    for (const RadialCoordinates &radial : radials) {
-        if (radial.r < minRadial.r) {
-            minRadial = radial;
-        }
-        if (radial.r > maxRadial.r) {
-            maxRadial = radial;
+    RadialCoordinates minRadial = radials[bin[0]];
+    for (unsigned int index : bin) {
+        if (radials[index].r < minRadial.r) {
+            minRadial = radials[index];
         }
     }
+
+    return minRadial;
+}
+
+RadialCoordinates getMaxRadialFromBin(const vector<RadialCoordinates> &radials, const vector<int> &bin) {
+    if (bin.empty()) {
+        cerr << "The bin is empty." << endl;
+        return RadialCoordinates{0.0, 0.0, 0.0}; // Default values
+    }
+
+    RadialCoordinates maxRadial = radials[bin[0]];
+    for (unsigned int index : bin) {
+        if (radials[index].r > maxRadial.r) {
+            maxRadial = radials[index];
+        }
+    }
+
+    return maxRadial;
+}
+
+void binToPowerOf(std::vector<RadialCoordinates> &radials, std::vector< int> bin, double k) {
+    for (unsigned int index : bin) {
+        radials[index].r = pow(radials[index].r, k);
+    }
+}
+
+RadialCoordinates getMeanOfBin(const std::vector<RadialCoordinates> &radials, const std::vector< int> &bin) {
+    RadialCoordinates meanRadial = {0.0, 0.0, 0.0};
+    double count = 0.0;
+
+    for (unsigned int index : bin) {
+        meanRadial.r += radials[index].r;
+        meanRadial.theta += radials[index].theta;
+        meanRadial.phi += radials[index].phi;
+        count += 1.0;
+    }
+
+    if (count > 0) {
+        meanRadial.r /= count;
+        meanRadial.theta /= count;
+        meanRadial.phi /= count;
+    }
+
+    return meanRadial;
 }
 
 void normalizeRadials(vector<RadialCoordinates> &radials, const RadialCoordinates &minVals, const RadialCoordinates &maxVals) {
@@ -112,7 +143,6 @@ void normalizeRadials(vector<RadialCoordinates> &radials, const RadialCoordinate
     }
 }
 
-
 void denormalizeRadials(vector<RadialCoordinates> &radials, const RadialCoordinates &minVals, const RadialCoordinates &maxVals) {
     for (RadialCoordinates &radial : radials) {
         radial.r = radial.r * (maxVals.r - minVals.r) + minVals.r;
@@ -121,71 +151,123 @@ void denormalizeRadials(vector<RadialCoordinates> &radials, const RadialCoordina
     }
 }
 
-vector<int> makeBinsHisto(int binsNumber, double minValueBins, double maxValueBins, vector<RadialCoordinates> &radials) {
-    vector<int> histogram(binsNumber, 0);
+void saveHistogram(const vector<int> &histo, const char *path, double minValueBins, double binWidth) {
+    ofstream flux(path);
+    for (int i = 0; i < histo.size(); i++) {
+        double x = minValueBins + i * binWidth;
+        flux << x << " " << histo[i] << endl;
+    }
+}
 
-    // Calcul de la plage de valeurs
-    double range = maxValueBins - minValueBins;
-    if (range <= 0.0) {
-        cerr << "La plage de valeurs est incorrecte." << endl;
-        return histogram;
+std::vector<std::vector< int>> histogram(const std::vector<RadialCoordinates> &radials, int k) {
+    std::vector<std::vector< int>> histogram(k);
+
+    double minRadial = std::numeric_limits<double>::max();
+    double maxRadial = std::numeric_limits<double>::min();
+
+    for (const RadialCoordinates &radial : radials) {
+        if (radial.r < minRadial) {
+            minRadial = radial.r;
+        }
+        if (radial.r > maxRadial) {
+            maxRadial = radial.r;
+        }
     }
 
-    // Largeur de chaque bin
-    double binWidth = range / binsNumber;
+    for (int i = 0; i < k; ++i) {
+        double Bmin = minRadial + ((maxRadial - minRadial) / k) * i;
+        double Bmax = minRadial + ((maxRadial - minRadial) / k) * (i + 1);
 
-    // Remplissage de l'histogramme
-    for (const RadialCoordinates &radial : radials) {
-        // Calcul de l'indice du bin
-        int binIndex = static_cast<int>((radial.r - minValueBins) / binWidth);
-
-        // Vérification des limites
-        if (binIndex < 0) {
-            binIndex = 0;
-        } else if (binIndex >= binsNumber) {
-            binIndex = binsNumber - 1;
+        for (unsigned int j = 0; j < radials.size(); ++j) {
+            if (radials[j].r > Bmin && radials[j].r <= Bmax) {
+                histogram[i].push_back(j);
+            }
         }
-
-        // Incrémentation du bin correspondant
-        histogram[binIndex]++;
     }
 
     return histogram;
 }
 
-vector<bool> stringToBinary(const string& input) 
-{
+vector<bool> stringToBinary(const string &input) {
     vector<bool> bv;
-    
-    for (char character : input) 
-    {
-        for (int i = 7; i >= 0; --i) 
-        {
+
+    for (char character : input) {
+        for (int i = 7; i >= 0; --i) {
             bv.push_back((character >> i) & 1);
         }
     }
-    
+
     return bv;
 }
 
-string binaryToString(const vector<bool>& bv) 
-{
+string binaryToString(const vector<bool> &bv) {
     string result;
-    
-    for (size_t i = 0; i < bv.size(); i += 8) 
-    {
+
+    for (size_t i = 0; i < bv.size(); i += 8) {
         char character = 0;
-        for (int j = 0; j < 8; ++j) 
-        {
-            if (i + j < bv.size()) 
-            {
+        for (int j = 0; j < 8; ++j) {
+            if (i + j < bv.size()) {
                 character |= bv[i + j] << (7 - j);
             }
         }
         result.push_back(character);
     }
-    
+
     return result;
+}
+
+void embedMessage(vector<RadialCoordinates> &radials, const vector<bool> &message, int n, double alpha) {
+      vector<vector< int>> bins = histogram(radials, n);
+    double deltaK = 0.1;
+
+    for (int i = 0; i < n; ++i) {
+        RadialCoordinates minRadial = getMinRadialFromBin(radials, bins[i]);
+        RadialCoordinates maxRadial = getMaxRadialFromBin(radials, bins[i]);
+        normalizeRadials(radials, minRadial, maxRadial);
+
+        double kCopy = 0.5;
+        RadialCoordinates mean = getMeanOfBin(radials, bins[i]);
+
+        if (message[i]) {
+            while (mean.r < (0.5 + alpha)) {
+                kCopy -= deltaK;
+                binToPowerOf(radials, bins[i], kCopy);
+                mean = getMeanOfBin(radials, bins[i]);
+            }
+        } else {
+            while (mean.r > (0.5 - alpha)) {
+                kCopy += deltaK;
+                binToPowerOf(radials, bins[i], kCopy);
+                mean = getMeanOfBin(radials, bins[i]);
+            }
+        }
+
+        denormalizeRadials(radials, minRadial, maxRadial);
+    }
+}
+
+vector<bool> extractMessage(vector<RadialCoordinates> &radials,  int n, double alpha) {
+    vector<vector< int>> bins = histogram(radials, n);
+    double deltaK = 0.1;
+    vector<bool> extractedMessage;
+    for (int i = 0; i < n; ++i) {
+        RadialCoordinates minRadial = getMinRadialFromBin(radials, bins[i]);
+        RadialCoordinates maxRadial = getMaxRadialFromBin(radials, bins[i]);
+        normalizeRadials(radials, minRadial, maxRadial);
+
+        double kCopy = 0.5;
+        RadialCoordinates mean = getMeanOfBin(radials, bins[i]);
+
+        bool bit = false;
+        if (mean.r > (0.5 + alpha)) {
+            bit = true;
+        }
+
+        extractedMessage.push_back(bit);
+        denormalizeRadials(radials, minRadial, maxRadial);
+    }
+
+    return extractedMessage;
 }
 
 int main(int argc, char *argv[]) {
@@ -203,73 +285,43 @@ int main(int argc, char *argv[]) {
     viewer.data().set_face_based(true);
 
     Eigen::Vector3d barycenter = getBarycenter(points);
-    //cout << "Barycentre du maillage : " << barycenter << endl;
 
-    // Test conversion sphérique pour un point
-   /* double r, theta, phi;
-
-    Eigen::Vector3d cartesianPoint(1.0, 2.0, 3.0); // Exemple de coordonnées cartésiennes
-    cartesianToSpherical(cartesianPoint, r, theta, phi);
-    cout << "Coordonnées sphériques : r = " << r << ", theta = " << theta << ", phi = " << phi << endl;
-
-    Eigen::Vector3d newCartesian;
-    sphericalToCartesian(r, theta, phi, newCartesian); // Exemple de conversion de sphérique à cartésienne
-    cout << "Coordonnées cartésiennes : " << newCartesian << endl; */
-
-    // Convertir les coordonnées cartésiennes en coordonnées radiales
+    // Convert Cartesian coordinates to radial coordinates
     vector<RadialCoordinates> radials;
     for (const Eigen::Vector3d &point : points) {
-        radials.push_back(cartesianToRadial(point));
+        radials.push_back(cartesianToRadial(point, barycenter));
     }
 
-    // Trouver les valeurs minimales et maximales des sommets radiaux
-    RadialCoordinates minRadial, maxRadial;
-    findMinMaxRadials(radials, minRadial, maxRadial);
+    string messageToEmbed = "Bonjour";
+    vector<bool> binaryMessageToEmbed = stringToBinary(messageToEmbed);
 
-    // Afficher les valeurs minimales et maximales des sommets radiaux
-    //cout << "Valeur minimale des sommets radiaux - R: " << minRadial.r << ", Theta: " << minRadial.theta << ", Phi: " << minRadial.phi << endl;
-   // cout << "Valeur maximale des sommets radiaux - R: " << maxRadial.r << ", Theta: " << maxRadial.theta << ", Phi: " << maxRadial.phi << endl;
+    double alpha = 0.05; // Embedding strength
 
-  /*  cout << "Avant normalisation : "<< endl;
-    for (int i = 0; i < min(5, static_cast<int>(radials.size())); ++i) {
-        const RadialCoordinates &radial = radials[i];
-        cout << "(r: " << radial.r << ", theta: " << radial.theta << ", phi: " << radial.phi << ") " << endl;
+    // Call the function to embed the message
+    embedMessage(radials, binaryMessageToEmbed, binaryMessageToEmbed.size(), alpha);
+
+    // Call the function to extract the message
+    vector<bool> extractedMessage = extractMessage(radials, binaryMessageToEmbed.size(), alpha);
+
+    // Convert the extracted message to text
+    string reconstructedMessage = binaryToString(extractedMessage);
+    cout << "Extracted message: " << reconstructedMessage << endl;
+
+    vector<Eigen::Vector3d> modifiedPoints;
+    for (const RadialCoordinates &radial : radials) {
+        Eigen::Vector3d cartesian;
+        sphericalToCartesian(radial.r, radial.theta, radial.phi, cartesian, barycenter);
+        modifiedPoints.push_back(cartesian);
     }
-  */
 
-  normalizeRadials(radials,  minRadial, maxRadial);
-    // Afficher les 5 premiers éléments après la normalisation
-   /* cout << "Après normalisation : "<< endl;
-    for (int i = 0; i < min(5, static_cast<int>(radials.size())); ++i) {
-        const RadialCoordinates &radial = radials[i];
-        cout << "(r: " << radial.r << ", theta: " << radial.theta << ", phi: " << radial.phi << ") "<< endl;
-    } */
+    // Call the function to save the mesh in OFF format
+    Eigen::MatrixXd modifiedV = vectorToEigen(modifiedPoints);
 
-   
-    // Sauvegardez les histogrammes dans des fichiers .dat
-    
-    saveHistogram(makeBinsHisto(10,0,1,radials), "bins10.dat");
-    saveHistogram(makeBinsHisto(100,0,1,radials), "bins100.dat");
-    saveHistogram(makeBinsHisto(1000,0,1,radials), "bins1000.dat");
-
-    // Dénormalisation
-    denormalizeRadials(radials, minRadial, maxRadial);
-
-    string message = "Bonjour c'est un message";
-    vector<bool> binaryMessage = stringToBinary(message);
-    string reconstructedMessage = binaryToString(binaryMessage);
-    cout << reconstructedMessage << endl;
-
-    // Afficher les 5 premiers éléments après la dénormalisation
-   /* cout << "Après dénormalisation : "<< endl;
-    for (int i = 0; i < min(5, static_cast<int>(radials.size())); ++i) {
-        const RadialCoordinates &radial = radials[i];
-        cout << "(r: " << radial.r << ", theta: " << radial.theta << ", phi: " << radial.phi << ") "<< endl;
-    } */
-
-
-    // Appel de la fonction pour sauvegarder le maillage au format OFF
- //   saveMeshOFF(embeddedV, F, "test.off");
+    if (igl::writeOFF("tatooed.off", modifiedV, F)) {
+        cout << "Modified mesh saved as 'tatooed.off'" << endl;
+    } else {
+        cerr << "Error saving the modified mesh." << endl;
+    }
 
     viewer.launch();
 
