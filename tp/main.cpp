@@ -270,6 +270,48 @@ vector<bool> extractMessage(vector<RadialCoordinates> &radials,  int n, double a
     return extractedMessage;
 }
 
+double calculateRMSE(const std::vector<RadialCoordinates>& original, const std::vector<RadialCoordinates>& modified) {
+    if (original.size() != modified.size()) {
+        cerr << "Error: Original and modified vectors have different sizes." << endl;
+        return -1.0;  // Return an error value
+    }
+
+    double sumSquaredErrors = 0.0;
+    for (size_t i = 0; i < original.size(); ++i) {
+        double error = original[i].r - modified[i].r;
+        sumSquaredErrors += error * error;
+    }
+
+    double meanSquaredError = sumSquaredErrors / original.size();
+    double rmse = sqrt(meanSquaredError);
+
+    return rmse;
+}
+
+#include <fstream>
+
+void testAlphas(vector<RadialCoordinates> &radials, const vector<bool> &binaryMessage, int numTests) {
+    ofstream alphaFile("alpha.dat");
+
+    vector<RadialCoordinates> originalRadials = radials;
+
+    for (int i = 1; i <= numTests; ++i) {
+        double alpha = 0.05 * i;
+
+        radials = originalRadials;
+
+        embedMessage(radials, binaryMessage, binaryMessage.size(), alpha);
+
+        double rmse = calculateRMSE(radials, originalRadials);
+
+        cout << "Test " << i << " - RMSE for alpha = " << alpha << ": " << rmse << endl;
+        alphaFile << alpha << " " << rmse << endl;
+    }
+    radials = originalRadials;
+    alphaFile.close();
+}
+
+
 int main(int argc, char *argv[]) {
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
@@ -294,6 +336,8 @@ int main(int argc, char *argv[]) {
 
     string messageToEmbed = "Bonjour";
     vector<bool> binaryMessageToEmbed = stringToBinary(messageToEmbed);
+
+   // testAlphas(radials, binaryMessageToEmbed, 10);
 
     double alpha = 0.05; // Embedding strength
 
